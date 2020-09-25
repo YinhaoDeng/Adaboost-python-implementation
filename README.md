@@ -1,3 +1,3 @@
 # Adaboost-python-implementation
 - apply on wbdc dataset
-- implemented by python with basic python library.
+- implemented by python only with basic python library.
