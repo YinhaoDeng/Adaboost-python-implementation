@@ -1,7 +1,7 @@
 import numpy as np
 
 
-dataset = np.genfromtxt('data/wdbc_data.csv', delimiter=',', dtype=str)  # load data from csv file using genfromtxt
+dataset = np.genfromtxt('wdbc_data.csv', delimiter=',', dtype=str)  # load data from csv file using genfromtxt
 dataset = np.delete(dataset, 0, 1)  # delete first column because it's useless ????? TODO: do we need this step?
 
 # convert label from string type into int type
@@ -15,15 +15,14 @@ for data in dataset:
 # split data into train and test datasets
 train_data = dataset[:300].astype(np.float)  # string to float
 test_data = dataset[300:].astype(np.float)  # string to float
-# print(test_data, test_data.shape)
+print(train_data, train_data.shape)
 
 # distribution = np.full((1, x.shape[1]), 1/x.shape[0])  # initialise distribution
 # print(distribution.shape)
 
 # sort train data  TODO: Do we need to make a copy of train data or not?
-# sorted_data = train_data(np.argsort(train_data[:, split_criteria_idx + 1]))  # because the label hasn't been seperated
 # sorted_data_x, sorted_data_y = sorted_data[:, 0], sorted_data[:, 1:]  # seperate label and features
-# for idx in range(len(sorted_data.shape[0]) - 1):  # range should be 30
+# for idx in range(30):  # range should be 30
 
 
 class DecisionStumps:
@@ -34,12 +33,22 @@ class DecisionStumps:
     def __init__(self):
         pass
 
-    # def sort_train_data_based_on_criteria(self, split_criteria_idx, split_num):
-    #     self.split_criteria_idx = split_criteria_idx
-    #     self.split_num = split_num
+    def sort_train_data_by_column(self, split_criteria_idx, train_data):
+        return train_data[train_data[:, split_criteria_idx+1].argsort()]
 
+    def split_sorted_train_data(self, split_criteria_idx, split_num, sorted_train_data):
+        self.split_criteria_idx = split_criteria_idx
+        self.split_num = split_num
 
-
+        left_sorted_train_data, right_sorted_train_data = [], []
+        for data in sorted_train_data:
+            if data[split_criteria_idx + 1] < split_num:
+                left_sorted_train_data.append(data)
+                print("<")
+            elif data[split_criteria_idx + 1] >= split_num:
+                right_sorted_train_data.append(data)
+                print(">")
+        return left_sorted_train_data, right_sorted_train_data
 
     def calculate_error_rate(self, original_x):
         error_rate = 0  # TODO: calculate error rate
@@ -50,7 +59,11 @@ class DecisionStumps:
         return alpha
 
 
-# a = DecisionStumps()
-# print(a.split_num)
+a = DecisionStumps()
+left, right = a.sort_train_data_based_on_criteria(split_criteria_idx=0, split_num=10, train_data=train_data)
+print(left)
+print('----'*10)
+print(right)
+
 
 
