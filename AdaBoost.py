@@ -20,15 +20,13 @@ test_data = dataset[300:].astype(np.float)  # string to float
 # distribution = np.full((1, x.shape[1]), 1/x.shape[0])  # initialise distribution
 # print(distribution.shape)
 
-# sort train data  TODO: Do we need to make a copy of train data or not?
-# sorted_data_x, sorted_data_y = sorted_data[:, 0], sorted_data[:, 1:]  # seperate label and features
-# for idx in range(30):  # range should be 30
 
 
 class DecisionStumps:
     error_rate = -1
     split_criteria_idx = -1
     split_num = -1
+    reverse = False
 
     def __init__(self):
         pass
@@ -41,18 +39,36 @@ class DecisionStumps:
         self.split_num = split_num
 
         left_sorted_train_data, right_sorted_train_data = [], []
+        a, b = 0, 0
         for data in sorted_train_data:
             if data[split_criteria_idx + 1] < split_num:
                 left_sorted_train_data.append(data)
-                print("<")
+                a += 1
             elif data[split_criteria_idx + 1] >= split_num:
                 right_sorted_train_data.append(data)
-                print(">")
+                b += 1
+        print("<", a, "    >", b)
         return left_sorted_train_data, right_sorted_train_data
 
-    def calculate_error_rate(self, original_x):
-        error_rate = 0  # TODO: calculate error rate
-        self.error_rate = error_rate
+    def calculate_error_rate(self, left_sorted_train_data, right_sorted_train_data, reverse_case): # TODO: 2cases: (-1, 1), (1, -1)
+        wrong_num_normal = 0  # case (-1, 1)
+        wrong_num_reverse = 0  # case (1, -1)
+
+        for data in left_sorted_train_data:
+            if data[0] == -1:
+                wrong_num_reverse += 1
+            elif data[0] == 1:
+                wrong_num_normal += 1
+
+        for data in right_sorted_train_data:
+            if data[0] == -1:
+                wrong_num_normal += 1
+            elif data[0] == 1:
+                wrong_num_reverse += 1
+
+        error_rate_normal = wrong_num_normal/(len(left_sorted_train_data)+len(right_sorted_train_data))
+        error_rate_reverse = wrong_num_reverse/(len(left_sorted_train_data)+len(right_sorted_train_data))
+        self.error_rate = error_rate_normal if reverse_case is False else error_rate_reverse
 
     def calculate_alpha_weight(self):
         alpha = 0.5 * np.log((1-self.error_rate)/self.error_rate)
@@ -61,11 +77,14 @@ class DecisionStumps:
 
 a = DecisionStumps()
 sorted_train_data = a.sort_train_data_by_column(split_criteria_idx=0,
-                                          train_data=train_data)
+                                                train_data=train_data)
 left, right = a.split_sorted_train_data(split_criteria_idx=0, split_num=10, sorted_train_data=sorted_train_data)
-print(left)
+# print(left)
 print('----'*10)
-print(right)
-
+# print(right)
+a.calculate_error_rate(left, right, reverse_case=True)
+print(a.error_rate)
+a.calculate_error_rate(left, right, reverse_case=False)
+print(a.error_rate)
 
 
