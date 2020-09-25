@@ -15,7 +15,7 @@ for data in dataset:
 # split data into train and test datasets
 train_data = dataset[:300].astype(np.float)  # string to float
 test_data = dataset[300:].astype(np.float)  # string to float
-print(train_data, train_data.shape)
+# print(train_data, train_data.shape)
 
 # distribution = np.full((1, x.shape[1]), 1/x.shape[0])  # initialise distribution
 # print(distribution.shape)
@@ -60,7 +60,9 @@ class DecisionStumps:
 
 
 a = DecisionStumps()
-left, right = a.sort_train_data_based_on_criteria(split_criteria_idx=0, split_num=10, train_data=train_data)
+sorted_train_data = a.sort_train_data_by_column(split_criteria_idx=0,
+                                          train_data=train_data)
+left, right = a.split_sorted_train_data(split_criteria_idx=0, split_num=10, sorted_train_data=sorted_train_data)
 print(left)
 print('----'*10)
 print(right)
