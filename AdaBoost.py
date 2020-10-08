@@ -35,32 +35,46 @@ def split_sorted_train_data(split_criteria_idx, split_num, sorted_train_data):
     return left_sorted_train_data, right_sorted_train_data
 
 
-def calculate_error_rate(left_sorted_train_data, right_sorted_train_data, reverse_case): # TODO: 2cases: (-1, 1), (1, -1)
-    wrong_num_normal = 0  # case (-1, 1)
-    wrong_num_reverse = 0  # case (1, -1)
+def split_sorted_train_data_and_calculate_error_rate(split_criteria_idx, split_num, sorted_train_data, reverse_case):
+    left_sorted_train_data, right_sorted_train_data = split_sorted_train_data(split_criteria_idx, split_num, sorted_train_data)
+    # total_sample_weight = np.sum(sorted_train_data, axis=1)[-2]
+    # print("total sample weight: ", total_sample_weight)
+    wrong_weight_normal = 0
+    wrong_weight_reverse = 0
 
     for data in left_sorted_train_data:
         if data[-1] == -1:
-            wrong_num_reverse += 1
+            # wrong_num_reverse += 1
+            wrong_weight_reverse += data[-2]  # add weight of wrong samples
         elif data[-1] == 1:
-            wrong_num_normal += 1
+            # wrong_num_normal += 1
+            wrong_weight_normal += data[-2]  # add weight of wrong samples
 
     for data in right_sorted_train_data:
         if data[-1] == -1:
-            wrong_num_normal += 1
+            # wrong_num_normal += 1
+            wrong_weight_normal += data[-2]  # add weight of wrong samples
         elif data[-1] == 1:
-            wrong_num_reverse += 1
+            # wrong_num_reverse += 1
+            wrong_weight_reverse += data[-2]  # add weight of wrong samples
 
     if not reverse_case:
-        error_rate = wrong_num_normal/(len(left_sorted_train_data)+len(right_sorted_train_data))
+        # error_rate = wrong_num_normal/(len(left_sorted_train_data)+len(right_sorted_train_data))
+        # error_rate = wrong_weight_normal/total_sample_weight
+        error_rate = wrong_weight_normal  # /1  total weight sum = 1
     elif reverse_case:
-        error_rate = wrong_num_reverse/(len(left_sorted_train_data)+len(right_sorted_train_data))
+        # error_rate = wrong_num_reverse/(len(left_sorted_train_data)+len(right_sorted_train_data))
+        error_rate = wrong_weight_reverse  # /1
     return error_rate
 
 
 def calculate_alpha_weight(error_rate):
     alpha_weight = 0.5 * np.log((1-error_rate)/error_rate)
     return alpha_weight
+
+
+def update_sample_weight():
+    pass
 
 
 ###################################################################################################################
@@ -96,40 +110,48 @@ for t in range(T):  # have T iterations overall
     for feature_idx in range(feature_nums):
         print("feature index: ", feature_idx)
         sorted_train_data = sort_train_data_by_column(split_criteria_idx=feature_idx, train_data=train_data)
-        for idx, data in enumerate(train_data):
-            if idx < train_data.shape[0]-1:  # if current line is not the last line : < 300
-                # print(idx, data)
-                split_num = (train_data[idx][feature_idx] + train_data[idx+1][feature_idx])/2
-                print("split num = ", split_num)
 
-                left_train_data, right_train_data = split_sorted_train_data(split_criteria_idx=feature_idx,
-                                                                            split_num=split_num,
-                                                                            sorted_train_data=sorted_train_data)
-                # calculate error rate in both cases
-                normal_case_error_rate = calculate_error_rate(left_train_data, right_train_data, False)
-                reversed_case_error_rate = calculate_error_rate(left_train_data, right_train_data, True)
-                print("normal case error: ", normal_case_error_rate)
-                print("reversed case error: ", reversed_case_error_rate)
+        for idx, data in enumerate(train_data[:-1]):  # iterate from 0 index to second last index
+            print(idx)
+            split_num = (train_data[idx][feature_idx] + train_data[idx+1][feature_idx])/2
 
-                # update if new best week classifier is found
-                if normal_case_error_rate < min_error_rate or reversed_case_error_rate < min_error_rate:
-                    if normal_case_error_rate < min_error_rate:
-                        print("new min_error_rate (1)")
-                        week_classifier_list[t].error_rate = normal_case_error_rate
-                        week_classifier_list[t].reverse = False
-                        min_error_rate = normal_case_error_rate
-                    elif reversed_case_error_rate < min_error_rate:
-                        print("new min_error_rate (2)")
-                        week_classifier_list[t].error_rate = reversed_case_error_rate
-                        week_classifier_list[t].reverse = True
-                        min_error_rate = reversed_case_error_rate
-                    week_classifier_list[t].split_num = split_num
-                    week_classifier_list[t].split_criteria_idx = feature_idx
-                    week_classifier_list[t].alpha_weight = calculate_alpha_weight(min_error_rate)
+            # calculate error rate in both cases
+            normal_case_error_rate = split_sorted_train_data_and_calculate_error_rate(split_criteria_idx=feature_idx,
+                                                                                split_num=split_num,
+                                                                                sorted_train_data=sorted_train_data,
+                                                                                reverse_case=False)
+            reversed_case_error_rate = split_sorted_train_data_and_calculate_error_rate(split_criteria_idx=feature_idx,
+                                                                               split_num=split_num,
+                                                                               sorted_train_data=sorted_train_data,
+                                                                               reverse_case=True)
 
-                print("min error rate: ", min_error_rate)
-            # if idx == 5:
-            #     quit()
+            print("normal case error: ", normal_case_error_rate)
+            print("reversed case error: ", reversed_case_error_rate)
+
+            # update if new best week classifier is found
+            if normal_case_error_rate < min_error_rate or reversed_case_error_rate < min_error_rate:
+                if normal_case_error_rate < min_error_rate:
+                    print("new min_error_rate (1)")
+                    week_classifier_list[t].error_rate = normal_case_error_rate
+                    week_classifier_list[t].reverse = False
+                    min_error_rate = normal_case_error_rate
+                elif reversed_case_error_rate < min_error_rate:
+                    print("new min_error_rate (2)")
+                    week_classifier_list[t].error_rate = reversed_case_error_rate
+                    week_classifier_list[t].reverse = True
+                    min_error_rate = reversed_case_error_rate
+                week_classifier_list[t].split_num = split_num
+                week_classifier_list[t].split_criteria_idx = feature_idx
+                week_classifier_list[t].alpha_weight = calculate_alpha_weight(min_error_rate)
+            print("min error rate: ", min_error_rate)
+
+            # TODO： update sample weights
+
+
+
+            # quit()
+        # quit()
+
 print("#"*100)
 week_classifier_list[0].show_object_info()
 
