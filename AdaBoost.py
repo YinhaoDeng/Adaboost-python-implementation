@@ -7,13 +7,17 @@ class DecisionStumps:
     split_num = -1
     reverse = False
     alpha_weight = -1
+    accuracy = -1
+
+    left_data, right_data = [], []
+
 
     def __init__(self):
         pass
 
     def show_object_info(self):
-        print("error rate: {}, split_criteria_idx: {}, split number: {}, reversed or not: {}, alpha weight {}".
-              format(self.error_rate, self.split_criteria_idx, self.split_num, self.reverse, self.alpha_weight))
+        print("error rate: {}, accuracy {}  |  [split_criteria_idx: {}, split number: {}]  | reversed or not: {}, alpha weight {}".
+              format(self.error_rate, self.accuracy, self.split_criteria_idx, self.split_num, self.reverse, self.alpha_weight))
 
 
 ####################################################################
@@ -31,41 +35,45 @@ def split_sorted_train_data(split_criteria_idx, split_num, sorted_train_data):
         elif data[split_criteria_idx] >= split_num:
             right_sorted_train_data.append(data)
             b += 1
-    print("<", a, "    >", b)
+    print("<", a, "    >=", b)
     return left_sorted_train_data, right_sorted_train_data
 
 
-def split_sorted_train_data_and_calculate_error_rate(split_criteria_idx, split_num, sorted_train_data, reverse_case):
-    left_sorted_train_data, right_sorted_train_data = split_sorted_train_data(split_criteria_idx, split_num, sorted_train_data)
-    # total_sample_weight = np.sum(sorted_train_data, axis=1)[-2]
-    # print("total sample weight: ", total_sample_weight)
-    wrong_weight_normal = 0
-    wrong_weight_reverse = 0
+def calculate_error_rate(left_sorted_train_data, right_sorted_train_data, reverse_case):
+    wrong_weight_normal, wrong_weight_reverse = 0, 0
+    correct_num_normal, correct_num_reverse = 0, 0
 
-    for data in left_sorted_train_data:
-        if data[-1] == -1:
-            # wrong_num_reverse += 1
-            wrong_weight_reverse += data[-2]  # add weight of wrong samples
-        elif data[-1] == 1:
-            # wrong_num_normal += 1
-            wrong_weight_normal += data[-2]  # add weight of wrong samples
+    if reverse_case is False:  # normal case  {-1, 1}
+        for data in left_sorted_train_data:  # {-1}
+            if data[-1] == -1:  # correctly classified
+                correct_num_normal += 1
+            elif data[-1] == 1:  # wrongly classified
+                wrong_weight_normal += data[-2]
+        for data in right_sorted_train_data:  # {1}
+            if data[-1] == -1:  # correctly classified
+                wrong_weight_normal += data[-2]
+            elif data[-1] == 1:  # wrongly classified
+                correct_num_normal += 1
 
-    for data in right_sorted_train_data:
-        if data[-1] == -1:
-            # wrong_num_normal += 1
-            wrong_weight_normal += data[-2]  # add weight of wrong samples
-        elif data[-1] == 1:
-            # wrong_num_reverse += 1
-            wrong_weight_reverse += data[-2]  # add weight of wrong samples
+    elif reverse_case:  # reverse case {1, -1}
+        for data in left_sorted_train_data:  # {1}
+            if data[-1] == -1:  # wrongly classified
+                wrong_weight_reverse += data[-2]
+            elif data[-1] == 1:
+                correct_num_reverse += 1
+        for data in right_sorted_train_data:  # {-1}
+            if data[-1] == -1:
+                correct_num_reverse += 1
+            elif data[-1] == 1:
+                wrong_weight_reverse += data[-2]
 
-    if not reverse_case:
-        # error_rate = wrong_num_normal/(len(left_sorted_train_data)+len(right_sorted_train_data))
-        # error_rate = wrong_weight_normal/total_sample_weight
-        error_rate = wrong_weight_normal  # /1  total weight sum = 1
+    if reverse_case is False:
+        error_rate = wrong_weight_normal
+        accuracy = correct_num_normal / sorted_train_data.shape[0]
     elif reverse_case:
-        # error_rate = wrong_num_reverse/(len(left_sorted_train_data)+len(right_sorted_train_data))
-        error_rate = wrong_weight_reverse  # /1
-    return error_rate
+        error_rate = wrong_weight_reverse
+        accuracy = correct_num_reverse / sorted_train_data.shape[0]
+    return error_rate, accuracy
 
 
 def calculate_alpha_weight(error_rate):
@@ -73,13 +81,75 @@ def calculate_alpha_weight(error_rate):
     return alpha_weight
 
 
-def update_sample_weight():
-    pass
+def update_sample_weight_and_update_train_data(left_sorted_train_data, right_sorted_train_data, reverse_case, alpha_weight):
+    if reverse_case is False:
+        for data in left_sorted_train_data:
+            data[-2] = data[-2] * np.exp(-alpha_weight*data[-1]*(-1))
+        for data in right_sorted_train_data:
+            data[-2] = data[-2] * np.exp(-alpha_weight * data[-1] * (1))
+    elif reverse_case:
+        for data in left_sorted_train_data:
+            data[-2] = data[-2] * np.exp(-alpha_weight*data[-1]*(1))
+        for data in right_sorted_train_data:
+            data[-2] = data[-2] * np.exp(-alpha_weight * data[-1] * (-1))
+
+    # calculate total sum of sample weights, Z_t, the normalization factor
+    sample_weight_left = np.sum(left_sorted_train_data, axis=0)[-2]  # sum along the column
+    sample_weight_right = np.sum(right_sorted_train_data, axis=0)[-2]  # sum along the column
+    total_sample_weight = sample_weight_left + sample_weight_right
+    print("total sample weight:", total_sample_weight)
+
+    # normalise data
+    for data in left_sorted_train_data:
+        data[-2] /= total_sample_weight
+    for data in right_sorted_train_data:
+        data[-2] /= total_sample_weight
+
+    # generate new train_data with new sample weights, by joining left_sorted_train_data with right_sorted_train_data
+    new_train_data = np.vstack((left_sorted_train_data, right_sorted_train_data))
+    return new_train_data
+
+
+def predict(test_data, week_clf_list, t):
+    result = []
+
+    for data in test_data:
+        negative_say, positive_say = 0, 0
+
+        for clf in week_clf_list[:t+1]:
+            if data[clf.split_criteria_idx] < clf.split_num:
+
+                if clf.reverse is False:  # {-1, 1}
+                    negative_say += clf.alpha_weight
+                if clf.reverse:  # {1, -1}
+                    positive_say += clf.alpha_weight
+            elif data[clf.split_criteria_idx] >= clf.split_num:
+                if clf.reverse is False:  # {-1, 1}
+                    positive_say += clf.alpha_weight
+                if clf.reverse:  # {1, -1}
+                    negative_say += clf.alpha_weight
+
+        if negative_say > positive_say:
+            result.append(-1)
+        elif negative_say < positive_say:
+            result.append(1)
+
+    return result
+
+
+def cal_test_acc(test_data, predict_result):
+    correct_num = 0
+    total_test_num = test_data.shape[0]
+    for i in range(total_test_num):
+        if test_data[i][-1] == predict_result[i]:
+            correct_num += 1
+    test_acc = correct_num / total_test_num
+    return test_acc
 
 
 ###################################################################################################################
 dataset = np.genfromtxt('wdbc_data.csv', delimiter=',', dtype=str)  # load data from csv file using genfromtxt
-dataset = np.delete(dataset, 0, 1)  # delete first column because it's useless ????? TODO: do we need this step?
+dataset = np.delete(dataset, 0, 1)  # delete first column because it's useless
 
 # convert label from string (M/B) into int (1/-1)
 for data in dataset:
@@ -93,67 +163,90 @@ initial_weight = 1/train_data.shape[0]
 sample_weight_column = np.full((train_data.shape[0], 1), initial_weight)  # add sample weight column to training set
 train_data = np.hstack((train_data, sample_weight_column))
 train_data = np.roll(train_data, -1)  # move sample label to the last for computation convenience
-print(train_data)
 
 test_data = dataset[300:].astype(np.float)  # string format to float
 test_data = np.roll(test_data, -1)  # move sample label to the last for computation convenience
 
-
 # select the split with minimum error rate:
-T = 1  # Global value
-feature_nums = train_data.shape[1]-1  # should be 30 features
-week_classifier_list = [DecisionStumps() for i in range(T)]  # initialise DecisionStumps class object list
+feature_nums = train_data.shape[1]-2  # should be 30 features [Why -2?  Because we have weight column & label column]
 
-for t in range(T):  # have T iterations overall
-    # select minimum error split criteria and split num
+week_classifier_list = [DecisionStumps() for i in range(feature_nums)]  # initialise DecisionStumps class object list
+
+hello = []
+steps = 30
+# select minimum error split criteria and split num
+
+# for feature_idx in range(feature_nums):
+for feature_idx in range(1):
     min_error_rate = 1
-    for feature_idx in range(feature_nums):
-        print("feature index: ", feature_idx)
-        sorted_train_data = sort_train_data_by_column(split_criteria_idx=feature_idx, train_data=train_data)
+    print(feature_idx)
+    sorted_train_data = sort_train_data_by_column(split_criteria_idx=feature_idx, train_data=train_data)
+    min_num = sorted_train_data[0][feature_idx]
+    max_num = sorted_train_data[-1][feature_idx]
+    print(min_num, max_num)
 
-        for idx, data in enumerate(train_data[:-1]):  # iterate from 0 index to second last index
-            print(idx)
-            split_num = (train_data[idx][feature_idx] + train_data[idx+1][feature_idx])/2
+    for i in range(-1, sorted_train_data.shape[0]+1):  # iterate from 0 index to 298
 
-            # calculate error rate in both cases
-            normal_case_error_rate = split_sorted_train_data_and_calculate_error_rate(split_criteria_idx=feature_idx,
-                                                                                split_num=split_num,
-                                                                                sorted_train_data=sorted_train_data,
-                                                                                reverse_case=False)
-            reversed_case_error_rate = split_sorted_train_data_and_calculate_error_rate(split_criteria_idx=feature_idx,
-                                                                               split_num=split_num,
-                                                                               sorted_train_data=sorted_train_data,
-                                                                               reverse_case=True)
+        split_num = min_num + i * (max_num - min_num) / steps
+        print("split value: ", split_num)
 
-            print("normal case error: ", normal_case_error_rate)
-            print("reversed case error: ", reversed_case_error_rate)
+        left_sorted_train_data, right_sorted_train_data = split_sorted_train_data(split_criteria_idx=feature_idx,
+                                                                                  split_num=split_num,
+                                                                                  sorted_train_data=sorted_train_data)
+ 
+        # calculate error rate in both cases
+        normal_case_error_rate, normal_acc = calculate_error_rate(left_sorted_train_data=left_sorted_train_data,
+                                                      right_sorted_train_data=right_sorted_train_data,
+                                                      reverse_case=False)
+        reversed_case_error_rate, reversed_acc = calculate_error_rate(left_sorted_train_data=left_sorted_train_data,
+                                                      right_sorted_train_data=right_sorted_train_data,
+                                                      reverse_case=True)
 
-            # update if new best week classifier is found
-            if normal_case_error_rate < min_error_rate or reversed_case_error_rate < min_error_rate:
-                if normal_case_error_rate < min_error_rate:
-                    print("new min_error_rate (1)")
-                    week_classifier_list[t].error_rate = normal_case_error_rate
-                    week_classifier_list[t].reverse = False
-                    min_error_rate = normal_case_error_rate
-                elif reversed_case_error_rate < min_error_rate:
-                    print("new min_error_rate (2)")
-                    week_classifier_list[t].error_rate = reversed_case_error_rate
-                    week_classifier_list[t].reverse = True
-                    min_error_rate = reversed_case_error_rate
-                week_classifier_list[t].split_num = split_num
-                week_classifier_list[t].split_criteria_idx = feature_idx
-                week_classifier_list[t].alpha_weight = calculate_alpha_weight(min_error_rate)
-            print("min error rate: ", min_error_rate)
+        print("normal case error: ", normal_case_error_rate)
+        print("reversed case error: ", reversed_case_error_rate)
 
-            # TODO： update sample weights
+        # update if new best week classifier is found
+        if normal_case_error_rate < min_error_rate or reversed_case_error_rate < min_error_rate:
+            if normal_case_error_rate < min_error_rate:
+                # print("new min_error_rate (1)")
+                week_classifier_list[feature_idx].error_rate = normal_case_error_rate
+                week_classifier_list[feature_idx].reverse = False
+                week_classifier_list[feature_idx].accuracy = normal_acc
+                min_error_rate = normal_case_error_rate
+                flag = False
+            elif reversed_case_error_rate < min_error_rate:
+                # print("new min_error_rate (2)")
+                week_classifier_list[feature_idx].error_rate = reversed_case_error_rate
+                week_classifier_list[feature_idx].reverse = True
+                week_classifier_list[feature_idx].accuracy = reversed_acc
+                min_error_rate = reversed_case_error_rate
+                flag = True
 
+            week_classifier_list[feature_idx].split_num = split_num
+            week_classifier_list[feature_idx].split_criteria_idx = feature_idx
+            week_classifier_list[feature_idx].alpha_weight = calculate_alpha_weight(min_error_rate)
+            week_classifier_list[feature_idx].left_data = left_sorted_train_data
+            week_classifier_list[feature_idx].right_data = right_sorted_train_data
 
+        print("current min error rate: ", min_error_rate, "reverse ? ", flag, '\n')
 
-            # quit()
-        # quit()
+    result = predict(test_data, week_classifier_list, feature_idx)
+    test_acc = cal_test_acc(test_data, result)
+    hello.append(test_acc)
+
+    # update train_data
+    train_data = update_sample_weight_and_update_train_data(left_sorted_train_data=week_classifier_list[feature_idx].left_data,
+                                                             right_sorted_train_data=week_classifier_list[feature_idx].right_data,
+                                                             reverse_case=week_classifier_list[feature_idx].reverse,
+                                                             alpha_weight=week_classifier_list[feature_idx].alpha_weight)
+    print("weight updated! train_data updated!")
+
 
 print("#"*100)
-week_classifier_list[0].show_object_info()
+# for clf in week_classifier_list:
+#     clf.show_object_info()
 
 
+# for idx, data in enumerate(hello):
+#     print('t= ', idx, ', accuracy= ', data)
 
