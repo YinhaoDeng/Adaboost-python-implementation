@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-
 class DecisionStumps:
     error_rate = -1
     split_criteria_idx = -1
@@ -10,16 +9,14 @@ class DecisionStumps:
     reverse = False
     alpha_weight = -1
     accuracy = -1
-
     left_data, right_data = [], []
-
 
     def __init__(self):
         pass
 
     def show_object_info(self):
-        print("error rate: {:.6f}, accuracy {:.2}  |  [split_criteria_idx: {}, split number: {:.4}]  | reversed or not: {}, alpha weight {:.5}".
-              format(self.error_rate, self.accuracy, self.split_criteria_idx, self.split_num, self.reverse, self.alpha_weight))
+        print("error rate: {:.5f}, accuracy {:.3}% |  [split_criteria_idx: {}, split number: {:.4}]  | reversed or not: {}, alpha weight {:.5}".
+              format(self.error_rate, self.accuracy*100, self.split_criteria_idx, self.split_num, self.reverse, self.alpha_weight))
 
 
 ####################################################################
@@ -176,7 +173,6 @@ train_data = np.hstack((train_data[:, 1:], label_column))
 
 #######################################################################################################
 test_data = dataset[300:].astype(np.float)  # string format to float
-# test_data = np.roll(test_data, -1)  # move sample label to the last for computation convenience
 test_label_column = test_data[:, 0].reshape(test_data.shape[0], 1)
 test_data_sklearn = test_data[:, 1:]
 test_label_sklearn = test_data[:, 0]
@@ -187,7 +183,7 @@ feature_nums = train_data.shape[1]-2  # should be 30 features [Why -2?  Because 
 
 week_classifier_list = [DecisionStumps() for i in range(feature_nums)]  # initialise DecisionStumps class object list
 
-hello = []
+my_adaboost_acc_against_iteration = []
 steps = 30
 
 for feature_idx in range(feature_nums):
@@ -245,7 +241,7 @@ for feature_idx in range(feature_nums):
 
     result = predict(test_data, week_classifier_list, feature_idx)
     test_acc = cal_test_acc(test_data, result)
-    hello.append(test_acc)
+    my_adaboost_acc_against_iteration.append(test_acc)
 
     # update train_data
     train_data = update_sample_weight_and_update_train_data(left_sorted_train_data=week_classifier_list[feature_idx].left_data,
@@ -254,36 +250,46 @@ for feature_idx in range(feature_nums):
                                                              alpha_weight=week_classifier_list[feature_idx].alpha_weight)
     print("weight updated! train_data updated!")
 
+print("\n\n\n################   My Adaboost  #################")
+print("30 Week classifier (decision stump) information:")
+for clf in week_classifier_list:
+    print(clf.show_object_info())
 
-print("#"*100)
-for idx, clf in enumerate(week_classifier_list):
-    print(idx, clf.show_object_info())
+for idx, acc in enumerate(my_adaboost_acc_against_iteration):
+    print('iteration=', idx, ', accuracy on test set = {:.4}%'.format(acc*100))
 
-for idx, data in enumerate(hello):
-    print('t=', idx, ', accuracy= ', data)
-
-# plot accuracy against iterations using matplot
-plt.figure(figsize=(5,4))
-plt.title('AdaBoost Accuracy against Iterations')
-plt.xlabel('iteration number')
-plt.ylabel('accuracy')
-t = range(len(hello))
-
-plt.plot(t, hello)
-plt.show()
-
-
-
+print("\n My AdaBoost best accuracy on test set: {:.3}%".format(max(my_adaboost_acc_against_iteration)*100))
 
 #####################################################################
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.tree import DecisionTreeClassifier
-print("################   sklearn Adaboost  #################")
-clf = AdaBoostClassifier(
-    DecisionTreeClassifier(max_depth=1), n_estimators=30, random_state=0,
-    algorithm="SAMME.R", learning_rate=0.5)
-clf.fit(train_data_sklearn, train_label_sklearn)
-# clf.predict(test_data_sklearn)
-sklearn_acc = clf.score(test_data_sklearn, test_label_sklearn)
-print("sklearn accuracy: {:.3}%".format(sklearn_acc*100))
+print("\n################   sklearn Adaboost  #################")
+sklearn_acc_against_iteration = []
+for i in range(1, 31):
+    clf = AdaBoostClassifier(
+        DecisionTreeClassifier(max_depth=1), n_estimators=i, random_state=0,
+        algorithm="SAMME.R", learning_rate=0.5)
+    clf.fit(train_data_sklearn, train_label_sklearn)
+    # clf.predict(test_data_sklearn)
+    sklearn_acc = clf.score(test_data_sklearn, test_label_sklearn)
+    sklearn_acc_against_iteration.append(sklearn_acc)
+print("Sklearn AdaBoost best accuracy on test set: {:.3}%".format(sklearn_acc*100))
+
+
+################### Performance plot ################################
+# plot accuracy against iterations using matplot
+plt.figure(figsize=(5, 4))
+plt.title('AdaBoost Accuracy Compare against Iterations on Test Set')
+
+plt.xlabel('iteration number')
+plt.ylabel('accuracy')
+plt.xlim(0, 30)  # set x axes range
+plt.ylim(0, 1)  # set y axes range
+
+t = range(1, 31)
+plt.plot(t, my_adaboost_acc_against_iteration, label="My AdaBoost")
+plt.plot(t, sklearn_acc_against_iteration, label="Sklearn")
+plt.legend()
+
+plt.show()
 
